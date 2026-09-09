@@ -127,6 +127,7 @@ type PromptBoxProps = {
   moodboards?: string[];
   onRemoveSeedDataReference?: (src: string) => void;
   onSelectSeedMoodboard?: (name: string) => void;
+  onSubmit?: (prompt: string) => void;
   seedDataReferences?: DatasetReference[];
 };
 
@@ -158,6 +159,7 @@ export default function PromptBox({
   moodboards = DEFAULT_SEED_MOODBOARDS,
   onRemoveSeedDataReference,
   onSelectSeedMoodboard,
+  onSubmit,
   seedDataReferences = [],
 }: PromptBoxProps) {
   const [exampleIndex, setExampleIndex] = useState(0);
@@ -484,6 +486,12 @@ export default function PromptBox({
           onChange={(event) => setPrompt(event.target.value)}
           onBlur={() => setIsPromptFocused(false)}
           onFocus={() => setIsPromptFocused(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              onSubmit?.(prompt);
+            }
+          }}
           ref={promptInputRef}
           value={prompt}
         />
@@ -870,6 +878,7 @@ export default function PromptBox({
           <button
             aria-label="Submit prompt"
             className="flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-[#EDC800] border-b-2 bg-[#FED700] transition-[border-width] duration-150 ease-out active:border-b"
+            onClick={() => onSubmit?.(prompt)}
             type="button"
           >
             <ArrowUp

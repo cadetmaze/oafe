@@ -3,6 +3,7 @@
 @theme inline {
   --font-fuzzy-bubbles: var(--fuzzy-bubbles), cursive;
   --font-geist: var(--geist), Arial, sans-serif;
+  --color-muted: #f4f4f5;
 }
 
 body {

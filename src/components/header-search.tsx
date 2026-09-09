@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 
 import { DATASET_EXAMPLES } from "@/components/prompt-box";
 
-export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
+type HeaderSearchProps = {
+  isVisible: boolean;
+  onSearch?: (query: string) => void;
+};
+
+export default function HeaderSearch({ isVisible, onSearch }: HeaderSearchProps) {
   const [exampleIndex, setExampleIndex] = useState(0);
   const [placeholder, setPlaceholder] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -41,11 +46,15 @@ export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
   }, [exampleIndex, isDeleting, isFocused, isVisible, placeholder, query]);
 
   return (
-    <div
+    <form
       aria-hidden={!isVisible}
       className={`absolute left-1/2 top-2.5 flex h-11 w-[min(600px,calc(100vw-240px))] -translate-x-1/2 rounded-2xl border border-[#E1E1E1] bg-[#F7F7F7] p-0.5 transition-[opacity,transform] duration-300 ease-out ${
         isVisible ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
       }`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSearch?.(query);
+      }}
     >
       <div className="flex min-w-0 flex-1 cursor-text items-center gap-2 rounded-[12px] border border-dashed border-[#EEEEEE] bg-white px-3">
         <MagnifyingGlass className="shrink-0 text-[#989898]" size={15} weight="regular" />
@@ -63,6 +72,6 @@ export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
           value={query}
         />
       </div>
-    </div>
+    </form>
   );
 }

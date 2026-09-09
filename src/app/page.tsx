@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import HeaderNav from "@/components/header-nav";
 import HeaderSearch from "@/components/header-search";
 import PromptBox from "@/components/prompt-box";
+import GridReveal from "@/components/ui/grid-reveal";
 import { REFERO_IMAGES } from "@/data/refero-images";
 import type { DatasetReference } from "@/types/dataset";
 
@@ -40,19 +41,47 @@ const CATEGORY_SUGGESTIONS = [
 ];
 
 const isVideoAsset = (src: string) => /\.(mp4|webm|mov)$/i.test(src);
+const SEARCH_RESULT_COUNT = 16;
+
+type SearchResultSlot = {
+  id: string;
+  image: DatasetReference;
+  status: "pending" | "ready" | "error";
+};
+
+function getSearchResults(query: string) {
+  const tokens = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
+  const directMatches = REFERO_IMAGES.filter((image) => {
+    const label = image.alt.toLowerCase();
+    return tokens.some((token) => label.includes(token));
+  });
+  const offset = Array.from(query).reduce((total, character) => total + character.charCodeAt(0), 0) % REFERO_IMAGES.length;
+  const rotatedFallback = [...REFERO_IMAGES.slice(offset), ...REFERO_IMAGES.slice(0, offset)];
+  const uniqueResults = new Map<string, DatasetReference>();
+
+  [...directMatches, ...rotatedFallback].forEach((image) => uniqueResults.set(image.src, image));
+  return Array.from(uniqueResults.values()).slice(0, SEARCH_RESULT_COUNT);
+}
 
 export default function Home() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const exploreSectionRef = useRef<HTMLDivElement>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const searchTimeoutsRef = useRef<number[]>([]);
+  const searchRequestRef = useRef(0);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [isExploreSettled, setIsExploreSettled] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResultSlot[] | null>(null);
+  const [isFetchingResults, setIsFetchingResults] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORY_SUGGESTIONS[0]);
   const [selectedMoodboardCategory, setSelectedMoodboardCategory] = useState<string | null>(null);
   const [isMoodboardCategoryOpen, setIsMoodboardCategoryOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(() => new Set());
   const [seedDataReferences, setSeedDataReferences] = useState<DatasetReference[]>([]);
-  const [previewImage, setPreviewImage] = useState<(typeof REFERO_IMAGES)[number] | null>(null);
+  const [previewImage, setPreviewImage] = useState<DatasetReference | null>(null);
   const [isMoodboardOpen, setIsMoodboardOpen] = useState(false);
   const [isMoodboardMenuOpen, setIsMoodboardMenuOpen] = useState(false);
   const [moodboardName, setMoodboardName] = useState("");
@@ -120,6 +149,7 @@ export default function Home() {
       if (toastTimeoutRef.current !== null) {
         window.clearTimeout(toastTimeoutRef.current);
       }
+      searchTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     };
   }, []);
 
@@ -137,8 +167,18 @@ export default function Home() {
     });
   };
 
+  const readyFeedImages = searchResults
+    ? searchResults.filter((result) => result.status === "ready").map((result) => result.image)
+    : REFERO_IMAGES;
+  const feedItems =
+    searchResults ??
+    REFERO_IMAGES.map<SearchResultSlot>((image) => ({
+      id: image.src,
+      image,
+      status: "ready",
+    }));
   const selectedFeedImages = Array.from(selectedImages)
-    .map((src) => REFERO_IMAGES.find((image) => image.src === src))
+    .map((src) => readyFeedImages.find((image) => image.src === src))
     .filter((image): image is DatasetReference => image !== undefined);
 
   const removeSeedDataReference = (src: string) => {
@@ -250,7 +290,58 @@ export default function Home() {
     });
   };
 
+  const cancelPendingSearch = () => {
+    searchRequestRef.current += 1;
+    searchTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
+    searchTimeoutsRef.current = [];
+    setIsFetchingResults(false);
+  };
+
+  const runSearch = (query: string) => {
+    cancelPendingSearch();
+
+    const requestId = searchRequestRef.current;
+    const images = getSearchResults(query.trim());
+    const slots = images.map((image, index) => ({
+      id: `${requestId}-${index}-${image.src}`,
+      image,
+      status: "pending" as const,
+    }));
+
+    setSearchResults(slots);
+    setIsFetchingResults(true);
+    setSelectedImages(new Set<string>());
+    setPreviewImage(null);
+    setSelectedCategory("");
+    setSelectedMoodboardCategory(null);
+    setIsMoodboardCategoryOpen(false);
+    scrollToExplore();
+
+    slots.forEach((slot, index) => {
+      const timeout = window.setTimeout(() => {
+        if (searchRequestRef.current !== requestId) {
+          return;
+        }
+
+        setSearchResults((currentResults) =>
+          currentResults?.map((result) =>
+            result.id === slot.id ? { ...result, status: "ready" } : result,
+          ) ?? null,
+        );
+
+        if (index === slots.length - 1) {
+          setIsFetchingResults(false);
+          searchTimeoutsRef.current = [];
+        }
+      }, 900 + index * 110);
+
+      searchTimeoutsRef.current.push(timeout);
+    });
+  };
+
   const selectMoodboardCategory = (name: string) => {
+    cancelPendingSearch();
+    setSearchResults(null);
     setSelectedMoodboardCategory(name);
     setSelectedCategory("");
     setIsMoodboardCategoryOpen(false);
@@ -258,10 +349,20 @@ export default function Home() {
   };
 
   const selectCategory = (category: string) => {
+    cancelPendingSearch();
+    setSearchResults(null);
     setSelectedCategory(category);
     setSelectedMoodboardCategory(null);
     setIsMoodboardCategoryOpen(false);
     scrollToExplore();
+  };
+
+  const markSearchResultError = (id: string) => {
+    setSearchResults((currentResults) =>
+      currentResults?.map((result) =>
+        result.id === id ? { ...result, status: "error" } : result,
+      ) ?? null,
+    );
   };
 
   return (
@@ -306,7 +407,7 @@ export default function Home() {
             </button>
           </div>
         )}
-        <HeaderSearch isVisible={isSearchMode} />
+        <HeaderSearch isVisible={isSearchMode} onSearch={runSearch} />
       </header>
       <main className="relative z-10 grid min-h-screen snap-start place-items-center">
         <div className="relative">
@@ -322,6 +423,7 @@ export default function Home() {
             moodboards={savedMoodboards}
             onRemoveSeedDataReference={removeSeedDataReference}
             onSelectSeedMoodboard={(name) => setSeedDataReferences(moodboardItems[name] ?? [])}
+            onSubmit={runSearch}
             seedDataReferences={seedDataReferences}
           />
         </div>
@@ -397,64 +499,96 @@ export default function Home() {
         </div>
         <section
           aria-label="Dataset feed"
+          aria-busy={isFetchingResults}
           className={`sticky top-28 z-10 h-[calc(100vh-128px)] rounded-lg border border-[#E1E1E1] bg-white ${
             isExploreSettled ? "overflow-y-auto overscroll-y-auto" : "overflow-y-hidden"
           }`}
         >
+          <p aria-live="polite" className="sr-only">
+            {isFetchingResults
+              ? `Fetching ${feedItems.length} image results`
+              : searchResults
+                ? `${readyFeedImages.length} image results ready`
+                : "Dataset feed ready"}
+          </p>
           <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {REFERO_IMAGES.map((image, index) => (
-              <article
-                className={`group relative aspect-[4/3] overflow-hidden rounded-lg border bg-[#F4F4F5] transition-[border-color,box-shadow] ${
-                  selectedImages.has(image.src) ? "border-[#423800] ring-2 ring-[#423800]/15" : "border-[#E4E4E7]"
-                }`}
-                key={image.src}
-              >
-                <button
-                  aria-label={`Preview ${image.alt}`}
-                  className="absolute inset-0 z-0 block h-full w-full cursor-pointer overflow-hidden"
-                  onClick={() => setPreviewImage(image)}
-                  type="button"
-                >
-                  {isVideoAsset(image.src) ? (
-                    <video
-                      aria-label={image.alt}
-                      className="h-full w-full object-cover"
-                      loop
-                      muted
-                      onMouseEnter={(event) => void event.currentTarget.play()}
-                      onMouseLeave={(event) => {
-                        event.currentTarget.pause();
-                        event.currentTarget.currentTime = 0;
-                      }}
-                      playsInline
-                      preload="metadata"
-                    >
-                      <source src={image.src} />
-                    </video>
-                  ) : (
-                    <Image
-                      alt={image.alt}
-                      className="animate-feed-pan object-cover"
-                      fill
-                      loading={index < 4 ? "eager" : "lazy"}
-                      sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                      src={image.src}
-                    />
-                  )}
-                </button>
-                <button
-                  aria-label={`${selectedImages.has(image.src) ? "Deselect" : "Select"} ${image.alt}`}
-                  aria-pressed={selectedImages.has(image.src)}
-                  className={`absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-[#E4E4E7] bg-white text-[#09090B] opacity-0 transition-[opacity,background-color] group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#09090B] hover:bg-[#F4F4F5] ${
-                    selectedImages.has(image.src) ? "opacity-100" : ""
+            {feedItems.map((item, index) => {
+              const { image, status } = item;
+              const isReady = status === "ready";
+              const isSearchItem = searchResults !== null;
+
+              return (
+                <article
+                  aria-busy={status === "pending"}
+                  className={`group relative aspect-[4/3] overflow-hidden rounded-lg border bg-[#F4F4F5] transition-[border-color,box-shadow] ${
+                    selectedImages.has(image.src) ? "border-[#423800] ring-2 ring-[#423800]/15" : "border-[#E4E4E7]"
                   }`}
-                  onClick={() => toggleImageSelection(image.src)}
-                  type="button"
+                  key={item.id}
                 >
-                  {selectedImages.has(image.src) ? <Check size={13} weight="bold" /> : null}
-                </button>
-              </article>
-            ))}
+                  <button
+                    aria-label={isReady ? `Preview ${image.alt}` : `Loading ${image.alt}`}
+                    className={`absolute inset-0 z-0 block h-full w-full overflow-hidden ${isReady ? "cursor-pointer" : "cursor-default"}`}
+                    disabled={!isReady}
+                    onClick={() => setPreviewImage(image)}
+                    type="button"
+                  >
+                    {status === "error" ? (
+                      <span className="flex h-full w-full items-center justify-center bg-[#F4F4F5] px-6 text-center font-geist text-[11px] font-normal text-[#989898]">
+                        This item could not be loaded
+                      </span>
+                    ) : isSearchItem && !isVideoAsset(image.src) ? (
+                      <GridReveal
+                        alt={isReady ? image.alt : ""}
+                        aspect={4 / 3}
+                        caption="Fetching Item"
+                        className="h-full rounded-none bg-[#F4F4F5]"
+                        estimatedDuration={1900 + index * 60}
+                        onError={() => markSearchResultError(item.id)}
+                        src={isReady ? image.src : null}
+                      />
+                    ) : isVideoAsset(image.src) ? (
+                      <video
+                        aria-label={image.alt}
+                        className="h-full w-full object-cover"
+                        loop
+                        muted
+                        onMouseEnter={(event) => void event.currentTarget.play()}
+                        onMouseLeave={(event) => {
+                          event.currentTarget.pause();
+                          event.currentTarget.currentTime = 0;
+                        }}
+                        playsInline
+                        preload="metadata"
+                      >
+                        <source src={image.src} />
+                      </video>
+                    ) : (
+                      <Image
+                        alt={image.alt}
+                        className="animate-feed-pan object-cover"
+                        fill
+                        loading={index < 4 ? "eager" : "lazy"}
+                        sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        src={image.src}
+                      />
+                    )}
+                  </button>
+                  {isReady && (
+                    <button
+                      aria-label={`${selectedImages.has(image.src) ? "Deselect" : "Select"} ${image.alt}`}
+                      aria-pressed={selectedImages.has(image.src)}
+                      className={`absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-[#E4E4E7] bg-white text-[#09090B] opacity-0 transition-[opacity,background-color] group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#09090B] hover:bg-[#F4F4F5] ${
+                        selectedImages.has(image.src) ? "opacity-100" : ""
+                      }`}
+                      onClick={() => toggleImageSelection(image.src)}
+                      type="button"
+                    >
+                      {selectedImages.has(image.src) ? <Check size={13} weight="bold" /> : null}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </section>
       </div>
