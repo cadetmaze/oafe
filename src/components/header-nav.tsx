@@ -1,22 +1,51 @@
 "use client";
 
 import { ArrowUpRight } from "@phosphor-icons/react";
+import { useState } from "react";
+
+type NavItem = "Build Your Dataset" | "Training Suite" | "Pricing" | "Read Docs";
 
 export default function HeaderNav() {
+  const [selectedItem, setSelectedItem] = useState<NavItem>("Build Your Dataset");
+  const itemClassName = (item: NavItem) =>
+    `cursor-pointer transition-colors ${
+      selectedItem === item ? "font-medium text-[#423800]" : "font-normal text-[#989898]"
+    }`;
+
   return (
-    <nav className="absolute left-1/2 top-4 flex h-8 -translate-x-1/2 items-center gap-8 font-geist text-[12px] font-medium">
-      <button className="cursor-pointer text-[#423800]" type="button">
+    <nav className="absolute left-1/2 top-4 flex h-8 -translate-x-1/2 items-center gap-8 font-geist text-[12px]">
+      <button
+        aria-pressed={selectedItem === "Build Your Dataset"}
+        className={itemClassName("Build Your Dataset")}
+        onClick={() => setSelectedItem("Build Your Dataset")}
+        type="button"
+      >
         Build Your Dataset
       </button>
-      <button className="cursor-pointer text-[#989898]" type="button">
+      <button
+        aria-pressed={selectedItem === "Training Suite"}
+        className={itemClassName("Training Suite")}
+        onClick={() => setSelectedItem("Training Suite")}
+        type="button"
+      >
         Training Suite
       </button>
-      <button className="cursor-pointer text-[#989898]" type="button">
+      <button
+        aria-pressed={selectedItem === "Pricing"}
+        className={itemClassName("Pricing")}
+        onClick={() => setSelectedItem("Pricing")}
+        type="button"
+      >
         Pricing
       </button>
-      <button className="flex cursor-pointer items-center gap-1 text-[#989898]" type="button">
+      <button
+        aria-pressed={selectedItem === "Read Docs"}
+        className={`flex items-center gap-1 ${itemClassName("Read Docs")}`}
+        onClick={() => setSelectedItem("Read Docs")}
+        type="button"
+      >
         Read Docs
-        <ArrowUpRight color="#989898" size={12} weight="regular" />
+        <ArrowUpRight color="currentColor" size={12} weight="regular" />
       </button>
     </nav>
   );
