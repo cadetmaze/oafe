@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-fuzzy-bubbles: var(--fuzzy-bubbles), cursive;
+  --font-geist: var(--geist), Arial, sans-serif;
+}
+
+body {
+  background: #ffffff;
+  color: #18181b;
+  font-family: var(--geist), Arial, Helvetica, sans-serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+@keyframes feed-pan {
+  0%,
+  18% {
+    transform: scale(1.06) translateY(0);
+  }
+
+  82%,
+  100% {
+    transform: scale(1.06) translateY(-6%);
+  }
+}
+
+.animate-feed-pan {
+  animation: feed-pan 12s ease-in-out infinite alternate paused;
+}
+
+.group:hover .animate-feed-pan,
+.group:focus-within .animate-feed-pan {
+  animation-play-state: running;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
