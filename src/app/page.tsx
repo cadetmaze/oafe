@@ -152,10 +152,12 @@ export default function Home() {
       selectedFeedImages.forEach((reference) => referencesBySource.set(reference.src, reference));
       return Array.from(referencesBySource.values());
     });
+    setSelectedImages(new Set<string>());
   };
 
   const downloadSelectedImages = () => {
     downloadImages(selectedFeedImages);
+    setSelectedImages(new Set<string>());
   };
 
   const downloadImages = (images: DatasetReference[]) => {
