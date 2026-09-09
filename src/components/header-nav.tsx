@@ -3,7 +3,7 @@
 import { ArrowUpRight } from "@phosphor-icons/react";
 import { useState } from "react";
 
-type NavItem = "Build Your Dataset" | "Training Suite" | "Pricing" | "Read Docs";
+type NavItem = "Build Your Dataset" | "Pricing" | "Read Docs";
 
 export default function HeaderNav() {
   const [selectedItem, setSelectedItem] = useState<NavItem>("Build Your Dataset");
@@ -21,17 +21,6 @@ export default function HeaderNav() {
         type="button"
       >
         Build Your Dataset
-      </button>
-      <button
-        aria-pressed={selectedItem === "Training Suite"}
-        className={`flex items-center gap-1.5 ${itemClassName("Training Suite")}`}
-        onClick={() => setSelectedItem("Training Suite")}
-        type="button"
-      >
-        Training Suite
-        <span className="rounded-[4px] border border-[#E1E1E1] bg-[#F7F7F7] px-1 py-0.5 text-[8px] font-medium leading-none tracking-[0.04em] text-[#989898]">
-          SOON
-        </span>
       </button>
       <button
         aria-pressed={selectedItem === "Pricing"}
