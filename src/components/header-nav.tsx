@@ -24,11 +24,14 @@ export default function HeaderNav() {
       </button>
       <button
         aria-pressed={selectedItem === "Training Suite"}
-        className={itemClassName("Training Suite")}
+        className={`flex items-center gap-1.5 ${itemClassName("Training Suite")}`}
         onClick={() => setSelectedItem("Training Suite")}
         type="button"
       >
         Training Suite
+        <span className="rounded-[4px] border border-[#E1E1E1] bg-[#F7F7F7] px-1 py-0.5 text-[8px] font-medium leading-none tracking-[0.04em] text-[#989898]">
+          SOON
+        </span>
       </button>
       <button
         aria-pressed={selectedItem === "Pricing"}
