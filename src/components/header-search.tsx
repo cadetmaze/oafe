@@ -9,9 +9,11 @@ export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
   const [exampleIndex, setExampleIndex] = useState(0);
   const [placeholder, setPlaceholder] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
-    if (!isVisible) {
+    if (!isVisible || isFocused || query.length > 0) {
       return;
     }
 
@@ -36,7 +38,7 @@ export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [exampleIndex, isDeleting, isVisible, placeholder]);
+  }, [exampleIndex, isDeleting, isFocused, isVisible, placeholder, query]);
 
   return (
     <div
@@ -45,9 +47,21 @@ export default function HeaderSearch({ isVisible }: { isVisible: boolean }) {
         isVisible ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
       }`}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[12px] border border-dashed border-[#EEEEEE] bg-white px-3 font-geist text-[13px] font-light text-[#989898]">
-        <MagnifyingGlass color="#989898" size={15} weight="regular" />
-        <span className="min-w-0 flex-1 truncate whitespace-nowrap">{placeholder}</span>
+      <div className="flex min-w-0 flex-1 cursor-text items-center gap-2 rounded-[12px] border border-dashed border-[#EEEEEE] bg-white px-3">
+        <MagnifyingGlass className="shrink-0 text-[#989898]" size={15} weight="regular" />
+        <input
+          aria-label="Search datasets"
+          autoComplete="off"
+          className="min-w-0 flex-1 bg-transparent font-geist text-[13px] font-light text-[#282828] outline-none placeholder:text-[#989898]"
+          disabled={!isVisible}
+          onBlur={() => setIsFocused(false)}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setIsFocused(true)}
+          placeholder={isFocused ? "" : placeholder}
+          spellCheck={false}
+          type="text"
+          value={query}
+        />
       </div>
     </div>
   );
