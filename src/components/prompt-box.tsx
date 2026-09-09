@@ -18,9 +18,17 @@ import {
   X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DatasetReference } from "@/types/dataset";
+import type {
+  DatasetContentType,
+  DatasetDuration,
+  DatasetMatchRange,
+  DatasetOrientation,
+  DatasetRequestDraft,
+  DatasetRequestOptions,
+} from "@/types/dataset-request";
 
 export const DATASET_EXAMPLES = [
   "First-person video of hands folding laundry and stacking shirts by color.",
@@ -35,10 +43,10 @@ const MAX_EXAMPLES = 10000;
 const DEFAULT_EXAMPLES = 100;
 const DEFAULT_SEED_MOODBOARDS = ["Product Inspiration", "Research References", "Landing Page Patterns"];
 
-type FilterType = "image" | "video" | "audio" | "document" | "3d";
-type DurationFilter = "any" | "under-15" | "15-60" | "1-5" | "over-5";
-type OrientationFilter = "any" | "portrait" | "landscape" | "square";
-type MatchRange = "very-high" | "high" | "balanced" | "nearby";
+type FilterType = DatasetContentType;
+type DurationFilter = DatasetDuration;
+type OrientationFilter = DatasetOrientation;
+type MatchRange = DatasetMatchRange;
 
 const FILTER_OPTIONS = [
   { value: "image" as const, label: "Images", icon: ImageIcon, formats: ["png", "jpg", "webp", "gif"] },
@@ -124,10 +132,14 @@ type Attachment = {
 };
 
 type PromptBoxProps = {
+  isSubmitting?: boolean;
   moodboards?: string[];
+  onDraftChange?: (draft: DatasetRequestOptions) => void;
+  onQueryChange: (query: string) => void;
   onRemoveSeedDataReference?: (src: string) => void;
   onSelectSeedMoodboard?: (name: string) => void;
-  onSubmit?: (prompt: string) => void;
+  onSubmit?: (draft: DatasetRequestDraft) => void;
+  query: string;
   seedDataReferences?: DatasetReference[];
 };
 
@@ -156,16 +168,19 @@ function FilePreview({ attachment, className }: { attachment: Attachment; classN
 }
 
 export default function PromptBox({
+  isSubmitting = false,
   moodboards = DEFAULT_SEED_MOODBOARDS,
+  onDraftChange,
+  onQueryChange,
   onRemoveSeedDataReference,
   onSelectSeedMoodboard,
   onSubmit,
+  query,
   seedDataReferences = [],
 }: PromptBoxProps) {
   const [exampleIndex, setExampleIndex] = useState(0);
   const [placeholder, setPlaceholder] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  const [prompt, setPrompt] = useState("");
   const [isPromptFocused, setIsPromptFocused] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
@@ -230,6 +245,44 @@ export default function PromptBox({
   ];
   const activeFilterIndex = activeFilterSection ? visibleFilterSections.indexOf(activeFilterSection) : 0;
   const submenuTopOffset = Math.max(0, activeFilterIndex) * 40;
+  const requestOptions = useMemo<DatasetRequestOptions>(
+    () => ({
+      estimatedTimeMinutes: {
+        max: estimatedMaxMinutes,
+        min: estimatedMinMinutes,
+      },
+      exampleCount,
+      filters: {
+        contentTypes: selectedFilterTypes,
+        duration: selectedDuration,
+        formats: selectedFormats,
+        matchRange: selectedMatchRange,
+        orientation: selectedOrientation,
+      },
+      seedData: {
+        references: seedDataReferences,
+        selectedMoodboard: selectedSeedMoodboard,
+        uploads: attachments.map((attachment) => attachment.file),
+      },
+    }),
+    [
+      attachments,
+      estimatedMaxMinutes,
+      estimatedMinMinutes,
+      exampleCount,
+      seedDataReferences,
+      selectedDuration,
+      selectedFilterTypes,
+      selectedFormats,
+      selectedMatchRange,
+      selectedOrientation,
+      selectedSeedMoodboard,
+    ],
+  );
+
+  useEffect(() => {
+    onDraftChange?.(requestOptions);
+  }, [onDraftChange, requestOptions]);
 
   useEffect(() => {
     if (!isFiltersOpen && !isExamplesOpen && !isSeedDataMenuOpen) {
@@ -368,6 +421,43 @@ export default function PromptBox({
     return () => window.clearTimeout(timer);
   }, [exampleIndex, isDeleting, placeholder]);
 
+  const submitRequest = () => {
+    const normalizedQuery = query.trim();
+
+    if (!normalizedQuery || isSubmitting) {
+      promptInputRef.current?.focus();
+      return;
+    }
+
+    const parsedExampleCount = Number(exampleCountInput);
+    const normalizedExampleCount = Number.isFinite(parsedExampleCount)
+      ? clampExampleCount(parsedExampleCount)
+      : exampleCount;
+    const normalizedProgress =
+      (normalizedExampleCount - MIN_EXAMPLES) / (MAX_EXAMPLES - MIN_EXAMPLES);
+    const normalizedMinMinutes = Math.max(
+      3,
+      Math.round((7 + normalizedProgress * 35) * estimateMultiplier),
+    );
+    const normalizedMaxMinutes =
+      normalizedMinMinutes + Math.max(2, Math.round(3 * estimateMultiplier));
+
+    if (normalizedExampleCount !== exampleCount) {
+      setExampleCount(normalizedExampleCount);
+      setExampleCountInput(String(normalizedExampleCount));
+    }
+
+    onSubmit?.({
+      ...requestOptions,
+      estimatedTimeMinutes: {
+        max: normalizedMaxMinutes,
+        min: normalizedMinMinutes,
+      },
+      exampleCount: normalizedExampleCount,
+      query: normalizedQuery,
+    });
+  };
+
   return (
     <div
       className="box-border min-h-[200px] w-[850px] rounded-[32px] border border-[#E1E1E1] border-b-2 bg-[#F7F7F7] p-[7px] pb-[6px]"
@@ -437,7 +527,7 @@ export default function PromptBox({
       <input
         ref={seedDataInputRef}
         aria-label="Choose seed data files"
-        accept="image/*,video/*,application/pdf,.mp4,.mov,.png,.jpg,.jpeg,.pdf"
+        accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.txt,.csv,.glb,.gltf,.obj,.fbx"
         className="absolute h-px w-px overflow-hidden opacity-0"
         multiple
         onChange={(event) => {
@@ -472,7 +562,7 @@ export default function PromptBox({
             y="0.5"
           />
         </svg>
-        {prompt.length === 0 && !isPromptFocused && (
+        {query.length === 0 && !isPromptFocused && (
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-4 top-4 h-12 overflow-hidden whitespace-nowrap font-geist text-[16px] font-light leading-6 text-[#A3A3A3]"
@@ -483,17 +573,17 @@ export default function PromptBox({
         <textarea
           aria-label="Prompt"
           className="absolute inset-x-4 top-4 h-24 max-h-24 resize-none overflow-y-auto border-0 bg-transparent p-0 font-geist text-[16px] font-light leading-6 text-[#282828] placeholder:text-[#A3A3A3] focus:outline-none"
-          onChange={(event) => setPrompt(event.target.value)}
+          onChange={(event) => onQueryChange(event.target.value)}
           onBlur={() => setIsPromptFocused(false)}
           onFocus={() => setIsPromptFocused(true)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
               event.preventDefault();
-              onSubmit?.(prompt);
+              submitRequest();
             }
           }}
           ref={promptInputRef}
-          value={prompt}
+          value={query}
         />
         <div className="absolute bottom-4 left-4 flex items-end gap-2">
           <div className="relative" ref={seedDataPopoverRef}>
@@ -877,8 +967,10 @@ export default function PromptBox({
           </div>
           <button
             aria-label="Submit prompt"
-            className="flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-[#EDC800] border-b-2 bg-[#FED700] transition-[border-width] duration-150 ease-out active:border-b"
-            onClick={() => onSubmit?.(prompt)}
+            aria-busy={isSubmitting}
+            className="flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-[#EDC800] border-b-2 bg-[#FED700] transition-[border-width,opacity] duration-150 ease-out active:border-b disabled:cursor-wait disabled:opacity-60"
+            disabled={isSubmitting}
+            onClick={submitRequest}
             type="button"
           >
             <ArrowUp

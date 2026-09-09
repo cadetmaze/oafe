@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { CaretDown, Check, DownloadSimple, Plus, ShareNetwork, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import HeaderNav from "@/components/header-nav";
 import HeaderSearch from "@/components/header-search";
@@ -10,6 +11,11 @@ import PromptBox from "@/components/prompt-box";
 import GridReveal from "@/components/ui/grid-reveal";
 import { REFERO_IMAGES } from "@/data/refero-images";
 import type { DatasetReference } from "@/types/dataset";
+import type {
+  DatasetRequestDraft,
+  DatasetRequestOptions,
+  DatasetRequestPayload,
+} from "@/types/dataset-request";
 
 const CATEGORY_SUGGESTIONS = [
   "Popular Categories",
@@ -42,6 +48,24 @@ const CATEGORY_SUGGESTIONS = [
 
 const isVideoAsset = (src: string) => /\.(mp4|webm|mov)$/i.test(src);
 const SEARCH_RESULT_COUNT = 16;
+const REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_REQUEST_OPTIONS: DatasetRequestOptions = {
+  estimatedTimeMinutes: { max: 10, min: 7 },
+  exampleCount: 100,
+  filters: {
+    contentTypes: [],
+    duration: "any",
+    formats: [],
+    matchRange: "balanced",
+    orientation: "any",
+  },
+  seedData: {
+    references: [],
+    selectedMoodboard: null,
+    uploads: [],
+  },
+};
 
 type SearchResultSlot = {
   id: string;
@@ -67,15 +91,20 @@ function getSearchResults(query: string) {
 }
 
 export default function Home() {
+  const router = useRouter();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const exploreSectionRef = useRef<HTMLDivElement>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const searchTimeoutsRef = useRef<number[]>([]);
   const searchRequestRef = useRef(0);
+  const requestOptionsRef = useRef<DatasetRequestOptions>(DEFAULT_REQUEST_OPTIONS);
+  const submissionInFlightRef = useRef(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [isExploreSettled, setIsExploreSettled] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultSlot[] | null>(null);
   const [isFetchingResults, setIsFetchingResults] = useState(false);
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestQuery, setRequestQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(CATEGORY_SUGGESTIONS[0]);
   const [selectedMoodboardCategory, setSelectedMoodboardCategory] = useState<string | null>(null);
   const [isMoodboardCategoryOpen, setIsMoodboardCategoryOpen] = useState(false);
@@ -151,6 +180,10 @@ export default function Home() {
       }
       searchTimeoutsRef.current.forEach((timeout) => window.clearTimeout(timeout));
     };
+  }, []);
+
+  const handleRequestOptionsChange = useCallback((options: DatasetRequestOptions) => {
+    requestOptionsRef.current = options;
   }, []);
 
   const toggleImageSelection = (src: string) => {
@@ -339,6 +372,65 @@ export default function Home() {
     });
   };
 
+  const submitDatasetRequest = async (draft: DatasetRequestDraft) => {
+    const query = draft.query.trim();
+
+    if (!query || submissionInFlightRef.current) {
+      return;
+    }
+
+    const { uploads, ...seedData } = draft.seedData;
+    const payload: DatasetRequestPayload = {
+      ...draft,
+      originContext: {
+        category: selectedCategory || null,
+        moodboard: selectedMoodboardCategory,
+      },
+      query,
+      seedData,
+      uploads: uploads.map((file) => ({
+        lastModified: file.lastModified,
+        name: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+      })),
+    };
+    const formData = new FormData();
+
+    formData.set("request", JSON.stringify(payload));
+    uploads.forEach((file) => formData.append("files", file, file.name));
+
+    submissionInFlightRef.current = true;
+    setIsSubmittingRequest(true);
+    runSearch(query);
+
+    try {
+      const response = await fetch("/api/dataset-requests", {
+        body: formData,
+        method: "POST",
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { error?: string; id?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error || "Unable to save this request.");
+      }
+
+      if (!body?.id || !REQUEST_ID_PATTERN.test(body.id)) {
+        throw new Error("The saved request did not return a valid ID.");
+      }
+
+      router.push(`/${body.id}`);
+    } catch (error) {
+      cancelPendingSearch();
+      setSearchResults(null);
+      showToast(error instanceof Error ? error.message : "Unable to save this request.");
+      submissionInFlightRef.current = false;
+      setIsSubmittingRequest(false);
+    }
+  };
+
   const selectMoodboardCategory = (name: string) => {
     cancelPendingSearch();
     setSearchResults(null);
@@ -407,7 +499,18 @@ export default function Home() {
             </button>
           </div>
         )}
-        <HeaderSearch isVisible={isSearchMode} onSearch={runSearch} />
+        <HeaderSearch
+          isSubmitting={isSubmittingRequest}
+          isVisible={isSearchMode}
+          onQueryChange={setRequestQuery}
+          onSearch={(query) => {
+            void submitDatasetRequest({
+              ...requestOptionsRef.current,
+              query,
+            });
+          }}
+          query={requestQuery}
+        />
       </header>
       <main className="relative z-10 grid min-h-screen snap-start place-items-center">
         <div className="relative">
@@ -420,10 +523,14 @@ export default function Home() {
             </p>
           </div>
           <PromptBox
+            isSubmitting={isSubmittingRequest}
             moodboards={savedMoodboards}
+            onDraftChange={handleRequestOptionsChange}
+            onQueryChange={setRequestQuery}
             onRemoveSeedDataReference={removeSeedDataReference}
             onSelectSeedMoodboard={(name) => setSeedDataReferences(moodboardItems[name] ?? [])}
-            onSubmit={runSearch}
+            onSubmit={(draft) => void submitDatasetRequest(draft)}
+            query={requestQuery}
             seedDataReferences={seedDataReferences}
           />
         </div>

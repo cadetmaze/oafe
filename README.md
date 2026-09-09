@@ -9,10 +9,15 @@ Built with Next.js App Router, React, TypeScript, Tailwind CSS, and Phosphor Ico
 
 ```bash
 npm install
+npm run db:migrate
 npm run dev
 ```
 
 Open [localhost:3000](http://localhost:3000). Changes update automatically.
+
+Dataset requests require PostgreSQL. Set `DATABASE_URL` in `.env.local` before
+running `npm run db:migrate`. Query details are stored as JSONB, while uploaded
+file metadata and bytes are stored in `dataset_request_files`.
 
 ## Project structure
 
@@ -28,6 +33,7 @@ Use `@/` to import from `src/`.
 
 ```bash
 npm run dev        # Start the development server
+npm run db:migrate # Apply the PostgreSQL schema
 npm run lint       # Run ESLint
 npm run typecheck  # Generate route types and check TypeScript
 npm run build      # Create a production build

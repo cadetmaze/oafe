@@ -6,15 +6,23 @@ import { useEffect, useState } from "react";
 import { DATASET_EXAMPLES } from "@/components/prompt-box";
 
 type HeaderSearchProps = {
+  isSubmitting?: boolean;
   isVisible: boolean;
+  onQueryChange: (query: string) => void;
   onSearch?: (query: string) => void;
+  query: string;
 };
 
-export default function HeaderSearch({ isVisible, onSearch }: HeaderSearchProps) {
+export default function HeaderSearch({
+  isSubmitting = false,
+  isVisible,
+  onQueryChange,
+  onSearch,
+  query,
+}: HeaderSearchProps) {
   const [exampleIndex, setExampleIndex] = useState(0);
   const [placeholder, setPlaceholder] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -47,13 +55,18 @@ export default function HeaderSearch({ isVisible, onSearch }: HeaderSearchProps)
 
   return (
     <form
+      aria-busy={isSubmitting}
       aria-hidden={!isVisible}
       className={`absolute left-1/2 top-2.5 flex h-11 w-[min(600px,calc(100vw-240px))] -translate-x-1/2 rounded-2xl border border-[#E1E1E1] bg-[#F7F7F7] p-0.5 transition-[opacity,transform] duration-300 ease-out ${
         isVisible ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
       }`}
       onSubmit={(event) => {
         event.preventDefault();
-        onSearch?.(query);
+        const normalizedQuery = query.trim();
+
+        if (normalizedQuery && !isSubmitting) {
+          onSearch?.(normalizedQuery);
+        }
       }}
     >
       <div className="flex min-w-0 flex-1 cursor-text items-center gap-2 rounded-[12px] border border-dashed border-[#EEEEEE] bg-white px-3">
@@ -64,7 +77,7 @@ export default function HeaderSearch({ isVisible, onSearch }: HeaderSearchProps)
           className="min-w-0 flex-1 bg-transparent font-geist text-[13px] font-light text-[#282828] outline-none placeholder:text-[#989898]"
           disabled={!isVisible}
           onBlur={() => setIsFocused(false)}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => onQueryChange(event.target.value)}
           onFocus={() => setIsFocused(true)}
           placeholder={isFocused ? "" : placeholder}
           spellCheck={false}
