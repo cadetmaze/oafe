@@ -400,7 +400,7 @@ export default function Home() {
           }`}
         >
           <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {REFERO_IMAGES.map((image) => (
+            {REFERO_IMAGES.map((image, index) => (
               <article
                 className={`group relative aspect-[4/3] overflow-hidden rounded-lg border bg-[#F4F4F5] transition-[border-color,box-shadow] ${
                   selectedImages.has(image.src) ? "border-[#423800] ring-2 ring-[#423800]/15" : "border-[#E4E4E7]"
@@ -434,6 +434,7 @@ export default function Home() {
                       alt={image.alt}
                       className="animate-feed-pan object-cover"
                       fill
+                      loading={index < 4 ? "eager" : "lazy"}
                       sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                       src={image.src}
                     />
