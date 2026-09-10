@@ -39,7 +39,7 @@ export default function WorkspaceChat({
     {
       id: `${requestId}-initial-assistant`,
       role: "assistant",
-      text: "I’ve got your request. I’m preparing the matching dataset results now.",
+      text: "I found a few examples that seem close. Approve or reject each one so I can refine the search until the results match what you want.",
     },
   ]);
   const [isThinking, setIsThinking] = useState(false);
