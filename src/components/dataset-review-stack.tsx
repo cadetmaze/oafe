@@ -3,7 +3,7 @@
 import { Check, X } from "@phosphor-icons/react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import GridReveal from "@/components/ui/grid-reveal";
 import { cn } from "@/lib/utils";
@@ -109,11 +109,28 @@ export default function DatasetReviewStack({
     useState<DatasetReviewDecision | null>(null);
   const [summary, setSummary] =
     useState<DatasetReviewSummary>(EMPTY_SUMMARY);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadedAssetSources, setLoadedAssetSources] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const currentItem = items[currentIndex];
   const visibleItems = items.slice(currentIndex, currentIndex + 3);
   const isComplete = currentIndex >= items.length;
+  const isLoading = Boolean(
+    currentItem && !loadedAssetSources.has(currentItem.src),
+  );
+
+  const markAssetLoaded = useCallback((assetSource: string) => {
+    setLoadedAssetSources((loadedSources) => {
+      if (loadedSources.has(assetSource)) {
+        return loadedSources;
+      }
+
+      const nextLoadedSources = new Set(loadedSources);
+      nextLoadedSources.add(assetSource);
+      return nextLoadedSources;
+    });
+  }, []);
 
   function choose(decision: DatasetReviewDecision) {
     if (!currentItem || pendingDecision || isLoading) {
@@ -139,7 +156,6 @@ export default function DatasetReviewStack({
     setSummary(nextSummary);
     setCurrentIndex(nextIndex);
     setPendingDecision(null);
-    setIsLoading(nextIndex < items.length);
 
     if (nextIndex >= items.length) {
       onComplete?.(nextSummary);
@@ -150,7 +166,6 @@ export default function DatasetReviewStack({
     setCurrentIndex(0);
     setPendingDecision(null);
     setSummary(EMPTY_SUMMARY);
-    setIsLoading(items.length > 0);
   }
 
   return (
@@ -183,6 +198,9 @@ export default function DatasetReviewStack({
         </div>
       ) : (
         <div className="flex w-full max-w-[720px] flex-col items-center">
+          <p className="mb-3 text-center text-[13px] font-normal text-[#423800]">
+            Select correct examples to improve search accuracy.
+          </p>
           <div className="relative aspect-video w-full">
             {visibleItems
               .slice(1)
@@ -210,6 +228,7 @@ export default function DatasetReviewStack({
                       alt=""
                       className="object-cover"
                       fill
+                      onLoad={() => markAssetLoaded(item.src)}
                       sizes="(max-width: 900px) 70vw, 720px"
                       src={item.src}
                     />
@@ -243,6 +262,17 @@ export default function DatasetReviewStack({
                 ease: [0.22, 1, 0.36, 1],
               }}
             >
+              <Image
+                alt={currentItem.alt}
+                className="object-cover"
+                fill
+                onError={() => markAssetLoaded(currentItem.src)}
+                onLoad={() => markAssetLoaded(currentItem.src)}
+                priority={currentIndex < 2}
+                sizes="(max-width: 900px) 70vw, 720px"
+                src={currentItem.src}
+              />
+
               {isLoading ? (
                 <div className="pointer-events-none absolute inset-0">
                   <GridReveal
@@ -250,22 +280,12 @@ export default function DatasetReviewStack({
                     aspect={16 / 9}
                     className="h-full w-full rounded-[18px]"
                     estimatedDuration={500}
-                    key={`reveal-${currentItem.id}`}
-                    onError={() => setIsLoading(false)}
-                    onRevealComplete={() => setIsLoading(false)}
+                    key={`reveal-${currentItem.src}`}
                     src={currentItem.src}
                   />
                 </div>
               ) : (
                 <>
-                  <Image
-                    alt={currentItem.alt}
-                    className="object-cover"
-                    fill
-                    priority={currentIndex < 2}
-                    sizes="(max-width: 900px) 70vw, 720px"
-                    src={currentItem.src}
-                  />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/50 to-transparent" />
                   <p className="pointer-events-none absolute bottom-4 left-4 rounded-full bg-black/55 px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-sm">
                     {currentItem.label}
