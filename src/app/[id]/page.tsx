@@ -30,7 +30,7 @@ export default async function RequestPage({
       </header>
       <main
         aria-label="Dataset request workspace"
-        className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 p-4"
+        className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 px-4 pb-4"
         data-request-id={id}
       >
         <section
