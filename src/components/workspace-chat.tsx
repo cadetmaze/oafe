@@ -27,10 +27,10 @@ import WorkspacePromptBox from "@/components/workspace-prompt-box";
 type WorkspaceChatProps = {
   externalAssistantMessage?: {
     id: string;
-    marker?: {
+    markers?: Array<{
       kind: ConversationMarkerKind;
       text: string;
-    };
+    }>;
     text: string;
   } | null;
   initialQuery: string;
@@ -136,14 +136,14 @@ export default function WorkspaceChat({
 
       const nextMessages = [...currentMessages];
 
-      if (externalAssistantMessage.marker) {
+      externalAssistantMessage.markers?.forEach((marker, markerIndex) => {
         nextMessages.push({
-          id: `${externalAssistantMessage.id}-marker`,
+          id: `${externalAssistantMessage.id}-marker-${markerIndex}`,
           kind: "marker",
-          markerKind: externalAssistantMessage.marker.kind,
-          text: externalAssistantMessage.marker.text,
+          markerKind: marker.kind,
+          text: marker.text,
         });
-      }
+      });
 
       nextMessages.push({
         id: externalAssistantMessage.id,

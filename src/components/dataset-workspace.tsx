@@ -4,7 +4,9 @@ import { useRef, useState } from "react";
 
 import DatasetReviewStack, {
   type DatasetReviewConfirmation,
+  type DatasetReviewItem,
 } from "@/components/dataset-review-stack";
+import DatasetResultsGrid from "@/components/dataset-results-grid";
 import WorkspaceChat from "@/components/workspace-chat";
 
 type DatasetWorkspaceProps = {
@@ -14,10 +16,10 @@ type DatasetWorkspaceProps = {
 
 type ExternalAssistantMessage = {
   id: string;
-  marker: {
-    kind: "labeling";
+  markers: Array<{
+    kind: "fetching" | "labeling";
     text: string;
-  };
+  }>;
   text: string;
 };
 
@@ -31,8 +33,25 @@ export default function DatasetWorkspace({
 }: DatasetWorkspaceProps) {
   const [externalAssistantMessage, setExternalAssistantMessage] =
     useState<ExternalAssistantMessage | null>(null);
+  const [confirmedReview, setConfirmedReview] =
+    useState<DatasetReviewConfirmation | null>(null);
   const deliveredSelectionsRef = useRef(new Set<string>());
   const confirmationSequenceRef = useRef(0);
+  const showMoreSequenceRef = useRef(0);
+
+  function showMoreExamples(nextBatchItems: readonly DatasetReviewItem[]) {
+    showMoreSequenceRef.current += 1;
+    setExternalAssistantMessage({
+      id: `${requestId}-review-more-${showMoreSequenceRef.current}`,
+      markers: [
+        {
+          kind: "fetching",
+          text: `Fetched ${nextBatchItems.length} more candidate examples`,
+        },
+      ],
+      text: `Here are ${nextBatchItems.length} more examples. Approve or reject each one and I’ll keep refining the results.`,
+    });
+  }
 
   function confirmSelections(confirmation: DatasetReviewConfirmation) {
     const signature = JSON.stringify({
@@ -46,16 +65,23 @@ export default function DatasetWorkspace({
 
     deliveredSelectionsRef.current.add(signature);
     confirmationSequenceRef.current += 1;
+    setConfirmedReview(confirmation);
 
     const approvedLabels = confirmation.approved.map(({ label }) => label);
     const rejectedLabels = confirmation.rejected.map(({ label }) => label);
 
     setExternalAssistantMessage({
       id: `${requestId}-review-confirmation-${confirmationSequenceRef.current}`,
-      marker: {
-        kind: "labeling",
-        text: `Labeled ${confirmation.approved.length + confirmation.rejected.length} reviewed examples`,
-      },
+      markers: [
+        {
+          kind: "labeling",
+          text: `Labeled ${confirmation.approved.length + confirmation.rejected.length} reviewed examples`,
+        },
+        {
+          kind: "fetching",
+          text: "Fetching refined dataset results",
+        },
+      ],
       text: [
         "Review confirmed.",
         `Approved: ${listLabels(approvedLabels)}.`,
@@ -88,7 +114,19 @@ export default function DatasetWorkspace({
           Preview and Actions
         </h2>
         <div aria-label="Preview and action space" className="h-full min-h-0">
-          <DatasetReviewStack onConfirm={confirmSelections} />
+          {confirmedReview ? (
+            <DatasetResultsGrid
+              reviewedItems={[
+                ...confirmedReview.approved,
+                ...confirmedReview.rejected,
+              ]}
+            />
+          ) : (
+            <DatasetReviewStack
+              onConfirm={confirmSelections}
+              onShowMore={showMoreExamples}
+            />
+          )}
         </div>
       </section>
     </>
