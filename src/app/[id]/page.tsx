@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import DatasetReviewStack from "@/components/dataset-review-stack";
 import WorkspaceChat from "@/components/workspace-chat";
 import { getDatasetRequestSummary } from "@/lib/postgres";
 
@@ -79,8 +80,10 @@ export default async function RequestPage({
           <h2 className="sr-only" id="preview-actions-heading">Preview and Actions</h2>
           <div
             aria-label="Preview and action space"
-            className="h-full overflow-y-auto overscroll-contain"
-          />
+            className="h-full min-h-0"
+          >
+            <DatasetReviewStack />
+          </div>
         </section>
       </main>
     </div>
