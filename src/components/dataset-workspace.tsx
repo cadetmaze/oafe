@@ -14,6 +14,10 @@ type DatasetWorkspaceProps = {
 
 type ExternalAssistantMessage = {
   id: string;
+  marker: {
+    kind: "labeling";
+    text: string;
+  };
   text: string;
 };
 
@@ -48,6 +52,10 @@ export default function DatasetWorkspace({
 
     setExternalAssistantMessage({
       id: `${requestId}-review-confirmation-${confirmationSequenceRef.current}`,
+      marker: {
+        kind: "labeling",
+        text: `Labeled ${confirmation.approved.length + confirmation.rejected.length} reviewed examples`,
+      },
       text: [
         "Review confirmed.",
         `Approved: ${listLabels(approvedLabels)}.`,

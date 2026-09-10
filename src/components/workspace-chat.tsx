@@ -1,7 +1,18 @@
 "use client";
 
+import {
+  CircleNotch,
+  Database,
+  MagnifyingGlass,
+  Tag,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  Marker,
+  MarkerContent,
+  MarkerIcon,
+} from "@/components/ui/marker";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -16,19 +27,58 @@ import WorkspacePromptBox from "@/components/workspace-prompt-box";
 type WorkspaceChatProps = {
   externalAssistantMessage?: {
     id: string;
+    marker?: {
+      kind: ConversationMarkerKind;
+      text: string;
+    };
     text: string;
   } | null;
   initialQuery: string;
   requestId: string;
 };
 
-type ChatMessage = {
+type ConversationMarkerKind = "explored" | "fetching" | "labeling";
+
+type TextChatMessage = {
   id: string;
+  kind: "message";
   role: "assistant" | "user";
   text: string;
 };
 
+type MarkerChatMessage = {
+  id: string;
+  kind: "marker";
+  markerKind: ConversationMarkerKind;
+  text: string;
+};
+
+type ChatMessage = MarkerChatMessage | TextChatMessage;
+
 const ASSISTANT_DELAY_MS = 700;
+
+function ConversationMarker({
+  kind,
+  text,
+}: {
+  kind: ConversationMarkerKind;
+  text: string;
+}) {
+  return (
+    <Marker className="px-1" role="status">
+      <MarkerIcon>
+        {kind === "explored" ? (
+          <MagnifyingGlass size={13} weight="bold" />
+        ) : kind === "fetching" ? (
+          <Database size={13} weight="bold" />
+        ) : (
+          <Tag size={13} weight="bold" />
+        )}
+      </MarkerIcon>
+      <MarkerContent>{text}</MarkerContent>
+    </Marker>
+  );
+}
 
 export default function WorkspaceChat({
   externalAssistantMessage,
@@ -38,11 +88,25 @@ export default function WorkspaceChat({
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: `${requestId}-initial-user`,
+      kind: "message",
       role: "user",
       text: initialQuery,
     },
     {
+      id: `${requestId}-initial-explored`,
+      kind: "marker",
+      markerKind: "explored",
+      text: "Explored your request",
+    },
+    {
+      id: `${requestId}-initial-fetching`,
+      kind: "marker",
+      markerKind: "fetching",
+      text: "Fetched 10 candidate examples",
+    },
+    {
       id: `${requestId}-initial-assistant`,
+      kind: "message",
       role: "assistant",
       text: "I found a few examples that seem close. Approve or reject each one so I can refine the search until the results match what you want.",
     },
@@ -61,20 +125,35 @@ export default function WorkspaceChat({
     }
 
     lastExternalMessageIdRef.current = externalAssistantMessage.id;
-    setMessages((currentMessages) =>
-      currentMessages.some(
-        (message) => message.id === externalAssistantMessage.id,
-      )
-        ? currentMessages
-        : [
-            ...currentMessages,
-            {
-              id: externalAssistantMessage.id,
-              role: "assistant",
-              text: externalAssistantMessage.text,
-            },
-          ],
-    );
+    setMessages((currentMessages) => {
+      if (
+        currentMessages.some(
+          (message) => message.id === externalAssistantMessage.id,
+        )
+      ) {
+        return currentMessages;
+      }
+
+      const nextMessages = [...currentMessages];
+
+      if (externalAssistantMessage.marker) {
+        nextMessages.push({
+          id: `${externalAssistantMessage.id}-marker`,
+          kind: "marker",
+          markerKind: externalAssistantMessage.marker.kind,
+          text: externalAssistantMessage.marker.text,
+        });
+      }
+
+      nextMessages.push({
+        id: externalAssistantMessage.id,
+        kind: "message",
+        role: "assistant",
+        text: externalAssistantMessage.text,
+      });
+
+      return nextMessages;
+    });
   }, [externalAssistantMessage]);
 
   useEffect(() => {
@@ -97,6 +176,7 @@ export default function WorkspaceChat({
       ...currentMessages,
       {
         id: `${requestId}-${sequence}-user`,
+        kind: "message",
         role: "user",
         text: value,
       },
@@ -107,7 +187,14 @@ export default function WorkspaceChat({
       setMessages((currentMessages) => [
         ...currentMessages,
         {
+          id: `${requestId}-${sequence}-explored`,
+          kind: "marker",
+          markerKind: "explored",
+          text: "Explored your update",
+        },
+        {
           id: `${requestId}-${sequence}-assistant`,
+          kind: "message",
           role: "assistant",
           text: "Got it. I’ll use that to refine the dataset results.",
         },
@@ -156,12 +243,25 @@ export default function WorkspaceChat({
                 >
                   {messages.map((message) => (
                     <MessageScrollerItem
-                      className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
+                      className={
+                        message.kind === "marker"
+                          ? "-my-1.5 flex justify-start"
+                          : message.role === "user"
+                            ? "flex justify-end"
+                            : "flex justify-start"
+                      }
                       key={message.id}
                       messageId={message.id}
-                      scrollAnchor={message.role === "user"}
+                      scrollAnchor={
+                        message.kind === "message" && message.role === "user"
+                      }
                     >
-                      {message.role === "user" ? (
+                      {message.kind === "marker" ? (
+                        <ConversationMarker
+                          kind={message.markerKind}
+                          text={message.text}
+                        />
+                      ) : message.role === "user" ? (
                         <p className="max-w-[86%] whitespace-pre-wrap rounded-[18px] bg-[#F4F4F5] px-4 py-3">
                           {message.text}
                         </p>
@@ -174,10 +274,21 @@ export default function WorkspaceChat({
                   ))}
                   {isThinking && (
                     <MessageScrollerItem
-                      className="flex justify-start"
+                      className="-my-1.5 flex justify-start"
                       messageId={`${requestId}-thinking`}
                     >
-                      <p className="animate-pulse px-1 text-[#989898]">Thinking…</p>
+                      <Marker className="px-1" role="status">
+                        <MarkerIcon>
+                          <CircleNotch
+                            className="animate-spin"
+                            size={13}
+                            weight="bold"
+                          />
+                        </MarkerIcon>
+                        <MarkerContent className="animate-pulse">
+                          Thinking…
+                        </MarkerContent>
+                      </Marker>
                     </MessageScrollerItem>
                   )}
                 </MessageScrollerContent>
