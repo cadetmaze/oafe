@@ -86,7 +86,7 @@ export default function DatasetResultsGrid({
     <div
       aria-busy={shownCount < resultEntries.length}
       aria-label="Found dataset examples"
-      className="h-full min-h-0 overflow-y-auto p-2"
+      className="h-full min-h-0 overflow-y-auto overscroll-none p-2"
     >
       <div className="grid grid-cols-3 items-start gap-2">
         {columns.map((column, columnIndex) => (

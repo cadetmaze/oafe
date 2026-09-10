@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import DatasetReviewStack, {
   type DatasetReviewConfirmation,
@@ -38,6 +38,27 @@ export default function DatasetWorkspace({
   const deliveredSelectionsRef = useRef(new Set<string>());
   const confirmationSequenceRef = useRef(0);
   const showMoreSequenceRef = useRef(0);
+
+  useEffect(() => {
+    const documentElement = document.documentElement;
+    const body = document.body;
+    const previousDocumentOverflow = documentElement.style.overflow;
+    const previousDocumentOverscroll = documentElement.style.overscrollBehavior;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+
+    documentElement.style.overflow = "hidden";
+    documentElement.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+
+    return () => {
+      documentElement.style.overflow = previousDocumentOverflow;
+      documentElement.style.overscrollBehavior = previousDocumentOverscroll;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, []);
 
   function showMoreExamples(nextBatchItems: readonly DatasetReviewItem[]) {
     showMoreSequenceRef.current += 1;

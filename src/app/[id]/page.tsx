@@ -20,7 +20,7 @@ export default async function RequestPage({
   }
 
   return (
-    <div className="grid h-dvh grid-rows-[64px_minmax(0,1fr)] overflow-hidden bg-white">
+    <div className="fixed inset-x-0 top-0 grid h-dvh grid-rows-[64px_minmax(0,1fr)] overflow-hidden overscroll-none bg-white">
       <header className="flex h-16 items-center bg-white px-4">
         <Link
           aria-label="Back to dataset builder"
