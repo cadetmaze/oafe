@@ -3,8 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import DatasetReviewStack from "@/components/dataset-review-stack";
-import WorkspaceChat from "@/components/workspace-chat";
+import DatasetWorkspace from "@/components/dataset-workspace";
 import { getDatasetRequestSummary } from "@/lib/postgres";
 
 const UUID_PATTERN =
@@ -66,25 +65,10 @@ export default async function RequestPage({
         className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-4 px-4 pb-4"
         data-request-id={id}
       >
-        <section
-          aria-labelledby="prompt-chat-heading"
-          className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[18px] border border-[#E1E1E1] bg-white"
-        >
-          <h2 className="sr-only" id="prompt-chat-heading">Prompt and Chat</h2>
-          <WorkspaceChat initialQuery={datasetRequest.query} requestId={datasetRequest.id} />
-        </section>
-        <section
-          aria-labelledby="preview-actions-heading"
-          className="min-h-0 min-w-0 overflow-hidden rounded-[18px] border border-[#E1E1E1] bg-[#FAFAFA]"
-        >
-          <h2 className="sr-only" id="preview-actions-heading">Preview and Actions</h2>
-          <div
-            aria-label="Preview and action space"
-            className="h-full min-h-0"
-          >
-            <DatasetReviewStack />
-          </div>
-        </section>
+        <DatasetWorkspace
+          initialQuery={datasetRequest.query}
+          requestId={datasetRequest.id}
+        />
       </main>
     </div>
   );

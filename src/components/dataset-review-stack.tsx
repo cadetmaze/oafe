@@ -3,7 +3,7 @@
 import { Check, X } from "@phosphor-icons/react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import GridReveal from "@/components/ui/grid-reveal";
 import { cn } from "@/lib/utils";
@@ -22,9 +22,15 @@ export type DatasetReviewSummary = {
   rejected: number;
 };
 
+export type DatasetReviewConfirmation = {
+  approved: DatasetReviewItem[];
+  rejected: DatasetReviewItem[];
+};
+
 export type DatasetReviewStackProps = {
   className?: string;
   items?: readonly DatasetReviewItem[];
+  onConfirm?: (confirmation: DatasetReviewConfirmation) => void;
   onComplete?: (summary: DatasetReviewSummary) => void;
   onDecision?: (
     item: DatasetReviewItem,
@@ -96,26 +102,38 @@ export const DEFAULT_REVIEW_ITEMS = [
 ] as const satisfies readonly DatasetReviewItem[];
 
 const EMPTY_SUMMARY: DatasetReviewSummary = { approved: 0, rejected: 0 };
+const MAX_REVIEW_ITEMS = 10;
+
+type ItemDecision = {
+  decision: DatasetReviewDecision;
+  item: DatasetReviewItem;
+};
 
 export default function DatasetReviewStack({
   className,
   items = DEFAULT_REVIEW_ITEMS,
+  onConfirm,
   onComplete,
   onDecision,
 }: DatasetReviewStackProps) {
   const reduceMotion = useReducedMotion();
+  const reviewItems = items.slice(0, MAX_REVIEW_ITEMS);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [pendingDecision, setPendingDecision] =
     useState<DatasetReviewDecision | null>(null);
   const [summary, setSummary] =
     useState<DatasetReviewSummary>(EMPTY_SUMMARY);
+  const [itemDecisions, setItemDecisions] = useState<ItemDecision[]>([]);
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const confirmationSentRef = useRef(false);
+  const completedDecisionKeysRef = useRef(new Set<string>());
   const [loadedAssetSources, setLoadedAssetSources] = useState<Set<string>>(
     () => new Set(),
   );
 
-  const currentItem = items[currentIndex];
-  const visibleItems = items.slice(currentIndex, currentIndex + 3);
-  const isComplete = currentIndex >= items.length;
+  const currentItem = reviewItems[currentIndex];
+  const visibleItems = reviewItems.slice(currentIndex, currentIndex + 3);
+  const isComplete = currentIndex >= reviewItems.length;
   const isLoading = Boolean(
     currentItem && !loadedAssetSources.has(currentItem.src),
   );
@@ -145,6 +163,12 @@ export default function DatasetReviewStack({
       return;
     }
 
+    const decisionKey = `${currentIndex}:${currentItem.id}`;
+    if (completedDecisionKeysRef.current.has(decisionKey)) {
+      return;
+    }
+
+    completedDecisionKeysRef.current.add(decisionKey);
     const decision = pendingDecision;
     const nextSummary = {
       approved: summary.approved + (decision === "approve" ? 1 : 0),
@@ -153,19 +177,34 @@ export default function DatasetReviewStack({
     const nextIndex = currentIndex + 1;
 
     onDecision?.(currentItem, decision);
+    setItemDecisions((decisions) => [
+      ...decisions,
+      { decision, item: currentItem },
+    ]);
     setSummary(nextSummary);
     setCurrentIndex(nextIndex);
     setPendingDecision(null);
 
-    if (nextIndex >= items.length) {
+    if (nextIndex >= reviewItems.length) {
       onComplete?.(nextSummary);
     }
   }
 
-  function restart() {
-    setCurrentIndex(0);
-    setPendingDecision(null);
-    setSummary(EMPTY_SUMMARY);
+  function confirmSelections() {
+    if (confirmationSentRef.current) {
+      return;
+    }
+
+    confirmationSentRef.current = true;
+    setIsConfirmed(true);
+    onConfirm?.({
+      approved: itemDecisions
+        .filter(({ decision }) => decision === "approve")
+        .map(({ item }) => item),
+      rejected: itemDecisions
+        .filter(({ decision }) => decision === "reject")
+        .map(({ item }) => item),
+    });
   }
 
   return (
@@ -186,13 +225,14 @@ export default function DatasetReviewStack({
           <p className="mt-1 text-[13px] text-[#777777]">
             {summary.approved} approved · {summary.rejected} rejected
           </p>
-          {items.length > 0 ? (
+          {reviewItems.length > 0 ? (
             <button
-              className="mt-5 h-8 cursor-pointer rounded-lg border border-[#E1E1E1] border-b-2 bg-[#F7F7F7] px-4 text-[12px] font-medium text-[#423800] transition-colors hover:bg-[#F1F1F1] active:border-b"
-              onClick={restart}
+              className="mt-5 h-8 cursor-pointer rounded-lg border border-[#E1E1E1] border-b-2 bg-[#F7F7F7] px-4 text-[12px] font-medium text-[#423800] transition-colors hover:bg-[#F1F1F1] active:border-b disabled:cursor-default disabled:opacity-50"
+              disabled={isConfirmed}
+              onClick={confirmSelections}
               type="button"
             >
-              Review Again
+              Confirm Selections
             </button>
           ) : null}
         </div>
@@ -248,7 +288,7 @@ export default function DatasetReviewStack({
                     }
                   : { opacity: 1, rotate: 0, scale: 1, x: 0, y: 0 }
               }
-              aria-label={`${currentItem.label}, item ${currentIndex + 1} of ${items.length}`}
+              aria-label={`${currentItem.label}, item ${currentIndex + 1} of ${reviewItems.length}`}
               className="absolute inset-0 z-30 overflow-hidden rounded-[18px] border border-[#E1E1E1] bg-white"
               initial={
                 reduceMotion
@@ -297,8 +337,8 @@ export default function DatasetReviewStack({
 
           <p aria-live="polite" className="sr-only" role="status">
             {isLoading
-              ? `Loading item ${currentIndex + 1} of ${items.length}`
-              : `Showing item ${currentIndex + 1} of ${items.length}`}
+              ? `Loading item ${currentIndex + 1} of ${reviewItems.length}`
+              : `Showing item ${currentIndex + 1} of ${reviewItems.length}`}
           </p>
 
           <div className="mt-8 grid w-full max-w-[420px] grid-cols-2 gap-3">

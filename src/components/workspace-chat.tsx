@@ -14,6 +14,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import WorkspacePromptBox from "@/components/workspace-prompt-box";
 
 type WorkspaceChatProps = {
+  externalAssistantMessage?: {
+    id: string;
+    text: string;
+  } | null;
   initialQuery: string;
   requestId: string;
 };
@@ -27,6 +31,7 @@ type ChatMessage = {
 const ASSISTANT_DELAY_MS = 700;
 
 export default function WorkspaceChat({
+  externalAssistantMessage,
   initialQuery,
   requestId,
 }: WorkspaceChatProps) {
@@ -44,7 +49,33 @@ export default function WorkspaceChat({
   ]);
   const [isThinking, setIsThinking] = useState(false);
   const messageSequenceRef = useRef(0);
+  const lastExternalMessageIdRef = useRef<string | null>(null);
   const replyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (
+      !externalAssistantMessage ||
+      lastExternalMessageIdRef.current === externalAssistantMessage.id
+    ) {
+      return;
+    }
+
+    lastExternalMessageIdRef.current = externalAssistantMessage.id;
+    setMessages((currentMessages) =>
+      currentMessages.some(
+        (message) => message.id === externalAssistantMessage.id,
+      )
+        ? currentMessages
+        : [
+            ...currentMessages,
+            {
+              id: externalAssistantMessage.id,
+              role: "assistant",
+              text: externalAssistantMessage.text,
+            },
+          ],
+    );
+  }, [externalAssistantMessage]);
 
   useEffect(() => {
     return () => {
