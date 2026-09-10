@@ -1,4 +1,4 @@
-import { ArrowLeft, DownloadSimple, UserPlus } from "@phosphor-icons/react/ssr";
+import { ArrowLeft, UserPlus } from "@phosphor-icons/react/ssr";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -56,13 +56,6 @@ export default async function RequestPage({
           >
             <UserPlus aria-hidden="true" size={13} weight="bold" />
             Invite Team
-          </button>
-          <button
-            className="flex h-8 items-center justify-center gap-2 rounded-lg border border-[#EDC800] border-b-2 bg-[#FED700] px-4 font-geist text-[12px] font-medium text-[#423800] transition-[border-width] active:border-b"
-            type="button"
-          >
-            <DownloadSimple aria-hidden="true" size={13} weight="bold" />
-            Export Dataset
           </button>
         </div>
         <h1 className="sr-only">Dataset Workspace</h1>
