@@ -512,8 +512,8 @@ export default function Home() {
           query={requestQuery}
         />
       </header>
-      <main className="relative z-10 grid min-h-screen snap-start place-items-center">
-        <div className="relative">
+      <main className="relative grid min-h-screen snap-start place-items-center">
+        <div className="relative z-40">
           <div className="absolute bottom-full left-1/2 mb-16 w-max -translate-x-1/2 text-center">
             <h1 className="font-fuzzy-bubbles text-[56px] font-bold leading-[1.1] tracking-[-0.1em] text-[#282828]">
               Teach your AI with data
