@@ -24,18 +24,20 @@ export default async function RequestPage({
       <header className="flex h-16 items-center bg-white px-4">
         <Link
           aria-label="Back to dataset builder"
-          className="group relative size-8 overflow-hidden rounded-lg border border-transparent text-[#423800] outline-none transition-[background-color,border-color] hover:border-[#E1E1E1] hover:bg-[#F7F7F7] focus-visible:border-[#E1E1E1] focus-visible:bg-[#F7F7F7]"
+          className="group relative size-8 overflow-hidden rounded-lg text-[#423800] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#423800]"
           href="/"
         >
-          <Image
-            alt=""
-            className="h-8 w-auto max-w-none transition-[opacity,transform] duration-150 group-hover:scale-75 group-hover:opacity-0 group-focus-visible:scale-75 group-focus-visible:opacity-0"
-            height={32}
-            priority
-            src="/logo.png"
-            width={142}
-          />
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+          <span className="absolute inset-0 overflow-hidden transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none group-hover:-translate-y-full group-focus-visible:-translate-y-full">
+            <Image
+              alt=""
+              className="h-8 w-auto max-w-none"
+              height={32}
+              priority
+              src="/logo.png"
+              width={142}
+            />
+          </span>
+          <span className="absolute inset-0 flex translate-y-full items-center justify-center rounded-lg border border-[#E1E1E1] bg-[#F7F7F7] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none group-hover:translate-y-0 group-focus-visible:translate-y-0">
             <ArrowLeft aria-hidden="true" size={16} weight="bold" />
           </span>
         </Link>
@@ -67,7 +69,7 @@ export default async function RequestPage({
       </header>
       <main
         aria-label="Dataset request workspace"
-        className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 px-4 pb-4"
+        className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-4 px-4 pb-4"
         data-request-id={id}
       >
         <section
