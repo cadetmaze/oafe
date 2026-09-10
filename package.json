@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@shadcn/react": "^0.3.1",
     "motion": "^13.2.0",
     "next": "16.3.4",
     "pg": "^8.23.0",

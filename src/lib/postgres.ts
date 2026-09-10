@@ -19,6 +19,11 @@ type StoredDatasetRequest = {
   id: string;
 };
 
+export type DatasetRequestSummary = {
+  id: string;
+  query: string;
+};
+
 class DatabaseConfigurationError extends Error {
   constructor() {
     super("DATABASE_URL is not configured");
@@ -151,13 +156,13 @@ export async function storeDatasetRequest(payload: DatasetRequestPayload, files:
   }
 }
 
-export async function datasetRequestExists(id: string) {
-  const result = await getPool().query(
-    "SELECT 1 FROM dataset_requests WHERE id = $1 LIMIT 1",
+export async function getDatasetRequestSummary(id: string): Promise<DatasetRequestSummary | null> {
+  const result = await getPool().query<{ id: string; query: string }>(
+    "SELECT id, query FROM dataset_requests WHERE id = $1 LIMIT 1",
     [id],
   );
 
-  return result.rowCount === 1;
+  return result.rows[0] ?? null;
 }
 
 export { DatabaseConfigurationError };
