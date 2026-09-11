@@ -1,0 +1,167 @@
+# Host processes use DATABASE_URL from .env. Compose maps
+# DOCKER_DATABASE_URL into DATABASE_URL for the API, workers, and migrations.
+# The provided Docker value targets the local `postgres` service; both values
+# may instead point to the same remote PostgreSQL database.
+#   azurite   ── stands in for Azure Blob Storage (same SDK/API,
+#                 swap connection string to go to real Azure Storage)
+#
+# apps (api/workers) run against these exactly as they would in production.
+
+x-app-depends-on: &app-depends-on
+  postgres:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+  azurite:
+    condition: service_started
+
+# DATABASE_URL is host-facing in .env so Next.js can use it directly. Every
+# container receives the Docker-network override instead. An empty
+# DOCKER_DATABASE_URL deliberately falls back to DATABASE_URL for remote DBs.
+x-docker-database-url: &docker-database-url ${DOCKER_DATABASE_URL:-${DATABASE_URL:?Set DATABASE_URL in .env before starting Docker Compose}}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dc_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: datacurate
+    ports:
+      # Keep the platform database separate from a local Homebrew/Postgres
+      # instance, which commonly already owns port 5432 on macOS.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - dc_pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: dc_azurite
+    command: "azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --silent"
+    ports:
+      - "10000:10000"
+    volumes:
+      - dc_azurite:/data
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    restart: "no"
+    environment:
+      # Deliberately pass only the database connection. API/model/storage
+      # credentials from .env are not available to this one-shot container.
+      DATABASE_URL: *docker-database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: dc_api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    ports:
+      - "8000:8000"
+    depends_on: *app-depends-on
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  worker-recommend:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: dc_worker_recommend
+    restart: unless-stopped
+    command: ["python", "-m", "recommend_worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    depends_on: *app-depends-on
+
+  worker-export:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: dc_worker_export
+    restart: unless-stopped
+    command: ["python", "-m", "export_worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    depends_on: *app-depends-on
+
+  worker-agent:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: dc_worker_agent
+    restart: unless-stopped
+    command: ["python", "-m", "agent_worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      # The interactive half. Kept separate from builds so a multi-minute build
+      # never sits in front of someone waiting for their review sample.
+      AGENT_JOB_TYPES: agent_request
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    depends_on: *app-depends-on
+
+  worker-agent-build:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: dc_worker_agent_build
+    restart: unless-stopped
+    command: ["python", "-m", "agent_worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      AGENT_JOB_TYPES: agent_build
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    depends_on: *app-depends-on
+
+  worker-ingest:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: dc_worker_ingest
+    restart: unless-stopped
+    command: ["python", "-m", "ingest_worker", "--poll"]
+    env_file: .env
+    environment:
+      DATABASE_URL: *docker-database-url
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      PUBLIC_BLOB_HOST: localhost
+    depends_on: *app-depends-on
+
+volumes:
+  dc_pgdata:
+  dc_azurite:

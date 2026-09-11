@@ -5,9 +5,11 @@ import {
   Database,
   MagnifyingGlass,
   Tag,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
+import WorkspaceExportPanel from "@/components/workspace-export-panel";
 import {
   Marker,
   MarkerContent,
@@ -24,7 +26,17 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import WorkspacePromptBox from "@/components/workspace-prompt-box";
 
+export type WorkspaceChatEvent = {
+  kind: "explored" | "fetching" | "labeling" | "message" | "error";
+  role?: "assistant" | "user" | null;
+  seq: number;
+  text: string;
+};
+
 type WorkspaceChatProps = {
+  canExport?: boolean;
+  events?: readonly WorkspaceChatEvent[];
+  exportJobId?: string | null;
   externalAssistantMessage?: {
     id: string;
     markers?: Array<{
@@ -34,10 +46,12 @@ type WorkspaceChatProps = {
     text: string;
   } | null;
   initialQuery: string;
+  isThinking?: boolean;
+  onSendMessage?: (value: string) => Promise<void> | void;
   requestId: string;
 };
 
-type ConversationMarkerKind = "explored" | "fetching" | "labeling";
+type ConversationMarkerKind = Exclude<WorkspaceChatEvent["kind"], "message">;
 
 type TextChatMessage = {
   id: string;
@@ -65,14 +79,19 @@ function ConversationMarker({
   text: string;
 }) {
   return (
-    <Marker className="px-1" role="status">
+    <Marker
+      className={kind === "error" ? "px-1 text-[#B42318]" : "px-1"}
+      role={kind === "error" ? "alert" : "status"}
+    >
       <MarkerIcon>
         {kind === "explored" ? (
           <MagnifyingGlass size={13} weight="bold" />
         ) : kind === "fetching" ? (
           <Database size={13} weight="bold" />
-        ) : (
+        ) : kind === "labeling" ? (
           <Tag size={13} weight="bold" />
+        ) : (
+          <WarningCircle size={13} weight="bold" />
         )}
       </MarkerIcon>
       <MarkerContent>{text}</MarkerContent>
@@ -81,8 +100,13 @@ function ConversationMarker({
 }
 
 export default function WorkspaceChat({
+  canExport = false,
+  events,
+  exportJobId = null,
   externalAssistantMessage,
   initialQuery,
+  isThinking: controlledIsThinking = false,
+  onSendMessage,
   requestId,
 }: WorkspaceChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -111,13 +135,20 @@ export default function WorkspaceChat({
       text: "I found a few examples that seem close. Approve or reject each one so I can refine the search until the results match what you want.",
     },
   ]);
-  const [isThinking, setIsThinking] = useState(false);
+  const [isLocallyThinking, setIsLocallyThinking] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [submissionErrors, setSubmissionErrors] = useState<MarkerChatMessage[]>([]);
   const messageSequenceRef = useRef(0);
   const lastExternalMessageIdRef = useRef<string | null>(null);
   const replyTimerRef = useRef<number | null>(null);
+  const isControlled = events !== undefined;
+  const isThinking = isControlled
+    ? controlledIsThinking || isSending
+    : isLocallyThinking;
 
   useEffect(() => {
     if (
+      isControlled ||
       !externalAssistantMessage ||
       lastExternalMessageIdRef.current === externalAssistantMessage.id
     ) {
@@ -154,7 +185,7 @@ export default function WorkspaceChat({
 
       return nextMessages;
     });
-  }, [externalAssistantMessage]);
+  }, [externalAssistantMessage, isControlled]);
 
   useEffect(() => {
     return () => {
@@ -164,13 +195,44 @@ export default function WorkspaceChat({
     };
   }, []);
 
-  function sendMessage(value: string) {
+  async function sendMessage(value: string) {
     if (isThinking) {
       return;
     }
 
     messageSequenceRef.current += 1;
     const sequence = messageSequenceRef.current;
+
+    if (isControlled) {
+      setIsSending(true);
+
+      try {
+        if (!onSendMessage) {
+          throw new Error("Messaging is not available yet.");
+        }
+
+        await onSendMessage(value);
+      } catch (error) {
+        const detail =
+          error instanceof Error && error.message.trim()
+            ? ` ${error.message.trim()}`
+            : "";
+
+        setSubmissionErrors((currentErrors) => [
+          ...currentErrors,
+          {
+            id: `${requestId}-${sequence}-send-error`,
+            kind: "marker",
+            markerKind: "error",
+            text: `Couldn’t send that message.${detail}`,
+          },
+        ]);
+      } finally {
+        setIsSending(false);
+      }
+
+      return;
+    }
 
     setMessages((currentMessages) => [
       ...currentMessages,
@@ -181,7 +243,7 @@ export default function WorkspaceChat({
         text: value,
       },
     ]);
-    setIsThinking(true);
+    setIsLocallyThinking(true);
 
     replyTimerRef.current = window.setTimeout(() => {
       setMessages((currentMessages) => [
@@ -199,10 +261,37 @@ export default function WorkspaceChat({
           text: "Got it. I’ll use that to refine the dataset results.",
         },
       ]);
-      setIsThinking(false);
+      setIsLocallyThinking(false);
       replyTimerRef.current = null;
     }, ASSISTANT_DELAY_MS);
   }
+
+  const renderedMessages: ChatMessage[] = isControlled
+    ? [
+        {
+          id: `${requestId}-initial-user`,
+          kind: "message",
+          role: "user",
+          text: initialQuery,
+        },
+        ...events.map<ChatMessage>((event) =>
+          event.kind === "message"
+            ? {
+                id: `${requestId}-event-${event.seq}`,
+                kind: "message",
+                role: event.role === "user" ? "user" : "assistant",
+                text: event.text,
+              }
+            : {
+                id: `${requestId}-event-${event.seq}`,
+                kind: "marker",
+                markerKind: event.kind,
+                text: event.text,
+              },
+        ),
+        ...submissionErrors,
+      ]
+    : messages;
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end">
@@ -241,7 +330,7 @@ export default function WorkspaceChat({
                   aria-busy={isThinking}
                   className="gap-5 px-4 py-5 text-[14px] leading-5 text-[#282828]"
                 >
-                  {messages.map((message) => (
+                  {renderedMessages.map((message) => (
                     <MessageScrollerItem
                       className={
                         message.kind === "marker"
@@ -300,8 +389,19 @@ export default function WorkspaceChat({
             <WorkspacePromptBox disabled={isThinking} onSubmit={sendMessage} />
           </div>
         </TabsContent>
-        <TabsContent className="min-h-0 flex-1" value="annotate" />
-        <TabsContent className="min-h-0 flex-1" value="export" />
+        <TabsContent className="min-h-0 flex-1" value="annotate">
+          <div className="flex h-full items-center justify-center px-6 text-center text-[13px] leading-5 text-[#777777]">
+            Annotation tools will appear here when reviewed items are ready.
+          </div>
+        </TabsContent>
+        <TabsContent className="min-h-0 flex-1" keepMounted value="export">
+          <WorkspaceExportPanel
+            key={requestId}
+            enabled={canExport}
+            exportJobId={exportJobId}
+            requestId={requestId}
+          />
+        </TabsContent>
       </Tabs>
     </MessageScrollerProvider>
   );

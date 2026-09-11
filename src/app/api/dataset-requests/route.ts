@@ -4,8 +4,13 @@ import type { DatasetRequestPayload } from "@/types/dataset-request";
 export const runtime = "nodejs";
 
 class InvalidRequestError extends Error {}
+class PayloadTooLargeError extends Error {}
 
 type JsonObject = { [key: string]: unknown };
+const MAX_UPLOAD_COUNT = 24;
+const MAX_UPLOAD_TOTAL_BYTES = 512 * 1024 * 1024;
+const MAX_MULTIPART_OVERHEAD_BYTES = 2 * 1024 * 1024;
+const UPLOAD_LIMIT_MESSAGE = "Seed uploads are limited to 24 files and 512 MiB total.";
 const CONTENT_TYPES = new Set(["image", "video", "audio", "document", "3d"]);
 const DURATIONS = new Set(["any", "under-15", "15-60", "1-5", "over-5"]);
 const ORIENTATIONS = new Set(["any", "portrait", "landscape", "square"]);
@@ -130,10 +135,34 @@ function parseJson(value: string, fieldName: string): unknown {
   }
 }
 
+function assertMultipartRequestSize(request: Request) {
+  const contentLength = Number(request.headers.get("content-length"));
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_UPLOAD_TOTAL_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+  ) {
+    throw new PayloadTooLargeError(UPLOAD_LIMIT_MESSAGE);
+  }
+}
+
+function assertUploadLimits(files: File[]) {
+  if (files.length > MAX_UPLOAD_COUNT) {
+    throw new PayloadTooLargeError(UPLOAD_LIMIT_MESSAGE);
+  }
+
+  const totalBytes = files.reduce((total, file) => total + file.size, 0);
+
+  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+    throw new PayloadTooLargeError(UPLOAD_LIMIT_MESSAGE);
+  }
+}
+
 async function readRequest(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
+    assertMultipartRequestSize(request);
     const formData = await request.formData();
     const serializedRequest = formData.get("request");
 
@@ -142,6 +171,7 @@ async function readRequest(request: Request) {
     }
 
     const files = formData.getAll("files").filter((entry): entry is File => typeof entry !== "string");
+    assertUploadLimits(files);
     const payload = validatePayload(parseJson(serializedRequest, "request"));
 
     if (files.length !== payload.uploads.length) {
@@ -193,6 +223,10 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof PayloadTooLargeError) {
+      return Response.json({ error: error.message }, { status: 413 });
+    }
+
     if (error instanceof InvalidRequestError) {
       return Response.json({ error: error.message }, { status: 400 });
     }

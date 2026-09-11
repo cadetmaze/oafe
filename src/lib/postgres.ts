@@ -35,6 +35,29 @@ const globalForPostgres = globalThis as typeof globalThis & {
   oafePostgresPool?: Pool;
 };
 
+function getPostgresConnectionOptions(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get("sslmode");
+
+    if (!sslMode) {
+      return { connectionString };
+    }
+
+    url.searchParams.delete("sslmode");
+
+    return {
+      connectionString: url.toString(),
+      ssl:
+        sslMode === "disable"
+          ? undefined
+          : { rejectUnauthorized: sslMode === "verify-full" },
+    };
+  } catch {
+    return { connectionString };
+  }
+}
+
 function getPool() {
   const connectionString = process.env.DATABASE_URL;
 
@@ -44,11 +67,11 @@ function getPool() {
 
   if (!globalForPostgres.oafePostgresPool) {
     globalForPostgres.oafePostgresPool = new Pool({
+      ...getPostgresConnectionOptions(connectionString),
       allowExitOnIdle: true,
       connectionTimeoutMillis: 5_000,
-      connectionString,
       idleTimeoutMillis: 30_000,
-      max: 10,
+      max: 2,
     });
   }
 
@@ -111,8 +134,17 @@ export async function storeDatasetRequest(payload: DatasetRequestPayload, files:
 
     const result = await client.query<{ created_at: Date }>(
       `
-        INSERT INTO dataset_requests (id, query, filters, uploads, request_payload)
-        VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb)
+        INSERT INTO dataset_requests (
+          id,
+          query,
+          filters,
+          uploads,
+          request_payload,
+          example_count,
+          seed,
+          origin_context
+        )
+        VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8::jsonb)
         RETURNING created_at
       `,
       [
@@ -121,6 +153,9 @@ export async function storeDatasetRequest(payload: DatasetRequestPayload, files:
         JSON.stringify(asJsonObject(payload.filters)),
         JSON.stringify(uploadDescriptors),
         JSON.stringify(payload),
+        payload.exampleCount,
+        JSON.stringify(payload.seedData),
+        JSON.stringify(payload.originContext),
       ],
     );
 

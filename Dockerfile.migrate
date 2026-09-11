@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Reuse the root lockfile so the migration image runs the same `pg` version as
+# `npm run db:migrate`. Environment files are excluded by .dockerignore and are
+# never copied into this image.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+
+COPY scripts/migrate.mjs scripts/migrate.mjs
+COPY db/migrations db/migrations
+
+USER node
+
+CMD ["node", "scripts/migrate.mjs"]
